@@ -1,0 +1,1147 @@
+
+ -------------------- blurFaceDetect.js ------------------------ 
+
+// Class for detecting faces in an image and blurring them
+class BlurFaceDetect {
+  constructor(detector) {
+    this.detector = detector;
+  }
+
+  // Detect faces in the image and apply blur
+  detectAndBlurFaces(snapshot) {
+    let faceImg = createImage(snapshot.width, snapshot.height);
+    faceImg.loadPixels();
+    let faces = this.detector.detect(snapshot.canvas);
+    snapshot.loadPixels();
+
+    // Copy original pixels to the face image
+    for (let i = 0; i < snapshot.pixels.length; i++) {
+      faceImg.pixels[i] = snapshot.pixels[i];
+    }
+
+    // Iterate over detected faces
+    for (let i = 0; i < faces.length; i++) {
+      let face = faces[i];
+      if (face[4] > 4) {
+        this.blurPixels(
+          int(face[0]) - 10,
+          int(face[1]),
+          int(face[2]),
+          int(face[3]),
+          faceImg
+        );
+      }
+    }
+
+    faceImg.updatePixels();
+    image(faceImg, 25, 600);
+  }
+
+  // Apply blur effect to the specified region of the image
+  blurPixels(startX, startY, dWidth, dHeight, faceImg) {
+    let matrix = this.getSimpleBlurKernel(20);
+    for (let y = startY; y < startY + dHeight; y++) {
+      for (let x = startX; x < startX + dWidth; x++) {
+        let pixelIndex = (faceImg.width * y + x) * 4;
+        let c = this.convolution(x, y, matrix, faceImg);
+        faceImg.pixels[pixelIndex + 0] = c[0];
+        faceImg.pixels[pixelIndex + 1] = c[1];
+        faceImg.pixels[pixelIndex + 2] = c[2];
+      }
+    }
+  }
+
+  // Generate a simple blur kernel
+  getSimpleBlurKernel(size) {
+    let m = [];
+    for (let i = 0; i < size; i++) {
+      let n = [];
+      for (let j = 0; j < size; j++) {
+        n.push(1 / (size * size));
+      }
+      m.push(n);
+    }
+    return m;
+  }
+
+  // Apply convolution on a pixel using a kernel
+  convolution(x, y, matrix, img) {
+    let matrixSize = matrix.length;
+    let totalRed = 0.0;
+    let totalGreen = 0.0;
+    let totalBlue = 0.0;
+    let offset = floor(matrixSize / 2);
+
+    for (let i = 0; i < matrixSize; i++) {
+      for (let j = 0; j < matrixSize; j++) {
+        let xloc = x + i - offset;
+        let yloc = y + j - offset;
+        let index = (xloc + img.width * yloc) * 4;
+        index = constrain(index, 0, img.pixels.length - 1);
+
+        totalRed += img.pixels[index + 0] * matrix[i][j];
+        totalGreen += img.pixels[index + 1] * matrix[i][j];
+        totalBlue += img.pixels[index + 2] * matrix[i][j];
+      }
+    }
+    return [totalRed, totalGreen, totalBlue];
+  }
+}
+
+ -------------------- colourConversionFaceDetect.js ------------------------ 
+
+class ColorConversionFaceDetector {
+  constructor(detector) {
+    this.detector = detector;
+  }
+
+  // Method to detect faces in an image and convert their color space
+  detectAndConvertColorSpace(snapshot) {
+    // Create a new image with the same dimensions as the snapshot
+    let faceImg = createImage(snapshot.width, snapshot.height);
+    // Load pixel data for the newly created image
+    faceImg.loadPixels();
+    // Detect faces in the snapshot using a face detection algorithm
+    let faces = this.detector.detect(snapshot.canvas);
+    // Load pixel data for the original snapshot
+    snapshot.loadPixels();
+
+    // Copy pixel data from the original snapshot to the face image
+    for (let i = 0; i < snapshot.pixels.length; i++) {
+      faceImg.pixels[i] = snapshot.pixels[i];
+    }
+
+    // Iterate over each detected face
+    for (let i = 0; i < faces.length; i++) {
+      let face = faces[i];
+      // If the detected face has sufficient confidence
+      if (face[4] > 4) {
+        // Convert the color space of the pixels within the bounding box of the face
+        this.convertColorSpacePixels(
+          int(face[0]) - 10,
+          int(face[1]),
+          int(face[2]),
+          int(face[3]),
+          faceImg
+        );
+      }
+    }
+    // Update pixel data for the face image
+    faceImg.updatePixels();
+    // Display the modified face image
+    image(faceImg, 25, 600);
+  }
+
+  // Method to convert the color space of pixels within a specified region of an image
+  convertColorSpacePixels(startX, startY, dWidth, dHeight, faceImg) {
+    // Loop through each pixel within the specified region
+    for (let y = startY; y < startY + dHeight; y++) {
+      for (let x = startX; x < startX + dWidth; x++) {
+        // Calculate the index of the current pixel in the image pixel array
+        let pixelIndex = (faceImg.width * y + x) * 4;
+        // Retrieve the RGB values of the pixel
+        let pixelRed = faceImg.pixels[pixelIndex + 0];
+        let pixelGreen = faceImg.pixels[pixelIndex + 1];
+        let pixelBlue = faceImg.pixels[pixelIndex + 2];
+
+        // Convert RGB to HSB color space
+        let hsb = this.rgbToHsb(pixelRed, pixelGreen, pixelBlue);
+        // Modify the color components to display hue as red, saturation as green, and brightness as blue
+        faceImg.pixels[pixelIndex + 0] = hsb[0] * 1.5; // Red component
+        faceImg.pixels[pixelIndex + 1] = hsb[1] * 1.5; // Green component
+        faceImg.pixels[pixelIndex + 2] = hsb[2] * 2; // Blue component
+        faceImg.pixels[pixelIndex + 3] = 255; // Alpha component (fully opaque)
+      }
+    }
+  }
+
+  // Method to convert RGB color to HSB color space
+  rgbToHsb(r, g, b) {
+    let maxVal = Math.max(r, g, b);
+    let minVal = Math.min(r, g, b);
+    let delta = maxVal - minVal;
+    let hue = 0,
+      saturation = 0,
+      brightness = 0;
+
+    if (delta !== 0) {
+      if (maxVal === r) {
+        hue = (g - b) / delta;
+      } else if (maxVal === g) {
+        hue = 2 + (b - r) / delta;
+      } else {
+        hue = 4 + (r - g) / delta;
+      }
+      hue *= 60;
+      if (hue < 0) hue += 360;
+      saturation = delta / maxVal;
+    }
+    brightness = maxVal;
+    return [hue, saturation, brightness];
+  }
+}
+
+ -------------------- colourSpace1.js ------------------------ 
+
+class ColorSpace1Converter {
+  // Constructor to initialize the color space converter
+  constructor() {}
+
+  // Method to convert RGB image to another color space
+  convertToColorSpace1(snapshot) {
+    // Create a new image to store the result in the desired color space
+    let hsbImg = createImage(snapshot.width, snapshot.height);
+    // Load pixel data for the new image
+    hsbImg.loadPixels();
+
+    // Load pixel data for the original image
+    snapshot.loadPixels();
+
+    // Iterate over each pixel in the image
+    for (let y = 0; y < snapshot.height; y++) {
+      for (let x = 0; x < snapshot.width; x++) {
+        // Calculate the index of the current pixel in the pixel array
+        let pixelIndex = (snapshot.width * y + x) * 4;
+        // Retrieve the RGB values of the current pixel
+        let pixelRed = snapshot.pixels[pixelIndex + 0];
+        let pixelGreen = snapshot.pixels[pixelIndex + 1];
+        let pixelBlue = snapshot.pixels[pixelIndex + 2];
+
+        // Convert RGB values to HSB color space
+        let hsb = this.rgbToHsb(pixelRed, pixelGreen, pixelBlue);
+        // Modify the color components to display hue as red, saturation as green, and brightness as blue
+        hsbImg.pixels[pixelIndex + 0] = hsb[0] * 1.5; // Red component
+        hsbImg.pixels[pixelIndex + 1] = hsb[1] * 1.5; // Green component
+        hsbImg.pixels[pixelIndex + 2] = hsb[2] * 2; // Blue component
+        hsbImg.pixels[pixelIndex + 3] = 255; // Alpha component (fully opaque)
+      }
+    }
+    // Update pixel data for the new image
+    hsbImg.updatePixels();
+    // Display the converted image
+    image(hsbImg, 225, 460);
+    // Add text label indicating the color space
+    text("Colour Space 1", 305, 595);
+  }
+
+  // Method to convert RGB color to HSB color space
+  rgbToHsb(r, g, b) {
+    // Use the p5.js color() function to create a color object from RGB values
+    let rgbColor = color(r, g, b);
+
+    // Extract HSB values from the color object
+    // Need to implement the algorithm for extracting HSB value from RGB for coursework
+    let h = hue(rgbColor);
+    let s = saturation(rgbColor);
+    let br = brightness(rgbColor);
+
+    // Return the HSB values as an array
+    return [h, s, br];
+  }
+}
+
+ -------------------- colourSpace1Threshold.js ------------------------ 
+
+class ColorSpace1Threshold {
+  // Method to apply thresholding to an image in Colour Space 1
+  applyThreshold(snapshot, thresholdValue) {
+    // Create a new image to store the thresholded result
+    let hsbImg = createImage(snapshot.width, snapshot.height);
+    // Load pixel data for the new image
+    hsbImg.loadPixels();
+
+    // Load pixel data for the original image
+    snapshot.loadPixels();
+
+    // Iterate over each pixel in the image
+    for (let y = 0; y < snapshot.height; y++) {
+      for (let x = 0; x < snapshot.width; x++) {
+        // Calculate the index of the current pixel in the pixel array
+        let pixelIndex = (snapshot.width * y + x) * 4;
+        // Retrieve the RGB values of the current pixel
+        let pixelRed = snapshot.pixels[pixelIndex + 0];
+        let pixelGreen = snapshot.pixels[pixelIndex + 1];
+        let pixelBlue = snapshot.pixels[pixelIndex + 2];
+
+        // Convert RGB values to HSB color space
+        let hsb = this.rgbToHsb(pixelRed, pixelGreen, pixelBlue);
+
+        // Set hue and saturation values from the original image
+        hsbImg.pixels[pixelIndex + 0] = hsb[0] * 1.5; // Hue
+        hsbImg.pixels[pixelIndex + 1] = hsb[1] * 1.5; // Saturation
+
+        // Apply thresholding based on the brightness value
+        let scaledBrightness;
+        if (hsb[2] <= thresholdValue) {
+          // Scale brightness value based on the threshold
+          scaledBrightness = map(hsb[2], 0, thresholdValue, 0, 100);
+        } else {
+          // Apply color as threshold value increases
+          scaledBrightness = map(hsb[2], thresholdValue, 100, 100, 200);
+        }
+        // Set the brightness value in the thresholded image
+        hsbImg.pixels[pixelIndex + 2] = scaledBrightness * 2; // Scale to match the range in ColourSpace1 function
+
+        // Set alpha value to fully opaque
+        hsbImg.pixels[pixelIndex + 3] = 255;
+      }
+    }
+
+    // Update pixel data for the thresholded image
+    hsbImg.updatePixels();
+
+    image(hsbImg, 225, 600);
+    // Add text label indicating the thresholded color space
+    text("Colour Space 1 Threshold", 305, 755);
+  }
+
+  // Method to convert RGB color to HSB color space
+  rgbToHsb(r, g, b) {
+    // Use the p5.js color() function to create a color object from RGB values
+    let rgbColor = color(r, g, b);
+
+    // Extract HSB values from the color object
+    // Need to implement the algorithm for extracting HSB value from RGB for coursework
+    let h = hue(rgbColor);
+    let s = saturation(rgbColor);
+    let br = brightness(rgbColor);
+
+    // Return the HSB values as an array
+    return [h, s, br];
+  }
+}
+
+ -------------------- colourSpace2.js ------------------------ 
+
+class ColorSpace2Converter {
+  // Method to convert RGB image to Colour Space 2 (YCbCr)
+  convertToColorSpace2(snapshot) {
+    // Create a new image to store the result in Colour Space 2
+    let ycbcrImg = createImage(snapshot.width, snapshot.height);
+    // Load pixel data for the new image
+    ycbcrImg.loadPixels();
+
+    // Load pixel data for the original image
+    snapshot.loadPixels();
+
+    // Iterate over each pixel in the image
+    for (let y = 0; y < snapshot.height; y++) {
+      for (let x = 0; x < snapshot.width; x++) {
+        // Calculate the index of the current pixel in the pixel array
+        let pixelIndex = (snapshot.width * y + x) * 4;
+        // Retrieve the RGB values of the current pixel
+        let pixelRed = snapshot.pixels[pixelIndex + 0];
+        let pixelGreen = snapshot.pixels[pixelIndex + 1];
+        let pixelBlue = snapshot.pixels[pixelIndex + 2];
+
+        // Convert RGB values to YCbCr color space
+        let ycbcr = this.rgbToYCbCr(pixelRed, pixelGreen, pixelBlue);
+        // Modify the color components to display Y component as red, Cb as green, and Cr as blue
+        ycbcrImg.pixels[pixelIndex + 0] = ycbcr[0]; // Y component (Red)
+        ycbcrImg.pixels[pixelIndex + 1] = ycbcr[1] + 128; // Cb component (Green)
+        ycbcrImg.pixels[pixelIndex + 2] = ycbcr[2] + 128; // Cr component (Blue)
+        ycbcrImg.pixels[pixelIndex + 3] = 255; // Alpha component (fully opaque)
+      }
+    }
+    // Update pixel data for the new image
+    ycbcrImg.updatePixels();
+    // Display the image in Colour Space 2
+    image(ycbcrImg, 425, 460);
+    // Add text label indicating the color space
+    text("Colour Space 2", 505, 595);
+  }
+
+  // Method to convert RGB color to YCbCr color space
+  rgbToYCbCr(r, g, b) {
+    // Calculate YCbCr components from RGB values
+    let y = 0.299 * r + 0.587 * g + 0.114 * b;
+    let cb = -0.169 * r - 0.331 * g + 0.5 * b;
+    let cr = 0.5 * r - 0.419 * g - 0.081 * b;
+
+    // Return the YCbCr values as an array
+    return [y, cb, cr];
+  }
+}
+
+ -------------------- colourSpace2Threshold.js ------------------------ 
+
+class ColorSpace2Threshold {
+  // Method to apply thresholding to an image in Colour Space 2
+  applyThreshold(snapshot, thresholdValue) {
+    // Create a new image to store the thresholded result
+    let thresholdedImage = createImage(snapshot.width, snapshot.height);
+    // Load pixel data for the new image
+    thresholdedImage.loadPixels();
+
+    // Load pixel data for the original image
+    snapshot.loadPixels();
+
+    // Iterate over each pixel in the image
+    for (let y = 0; y < snapshot.height; y++) {
+      for (let x = 0; x < snapshot.width; x++) {
+        // Calculate the index of the current pixel in the pixel array
+        let pixelIndex = (snapshot.width * y + x) * 4;
+        // Retrieve the YCbCr values of the current pixel
+        let ycbcrY = snapshot.pixels[pixelIndex + 0];
+        let ycbcrCb = snapshot.pixels[pixelIndex + 1] - 128;
+        let ycbcrCr = snapshot.pixels[pixelIndex + 2] - 128;
+
+        // Apply thresholding based on the Cb component
+        let scaledCb = map(ycbcrCb, -128, 128, 0, 255);
+        let scaledCr = map(ycbcrCr, -128, 128, 0, 255);
+        let thresholdedValue =
+          scaledCb * scaledCb + scaledCr * scaledCr <=
+          thresholdValue * thresholdValue
+            ? 0
+            : 255;
+
+        // Set the pixel value in the thresholded image
+        thresholdedImage.pixels[pixelIndex + 0] = thresholdedValue; // Red component
+        thresholdedImage.pixels[pixelIndex + 1] = thresholdedValue; // Green component
+        thresholdedImage.pixels[pixelIndex + 2] = thresholdedValue; // Blue component
+        thresholdedImage.pixels[pixelIndex + 3] = 255; // Alpha component (fully opaque)
+      }
+    }
+
+    // Update pixel data for the thresholded image
+    thresholdedImage.updatePixels();
+
+    // Display the thresholded image
+    image(thresholdedImage, 425, 600);
+    // Add text label indicating the thresholded color space
+    text("Colour Space 2 Threshold", 505, 755);
+  }
+}
+
+ -------------------- dogFilter.js ------------------------ 
+
+// DogFilter class for applying a dog filter effect to an image
+class DogFilter {
+  // Constructor to initialize the DogFilter with a face detector and a dog image
+  constructor(detector, dogImage) {
+    this.detector = detector; // Face detector object
+    this.dogImage = dogImage; // Dog image used for the filter effect
+  }
+
+  // Method to apply the dog filter effect to the given snapshot
+  apply(snapshot) {
+    // Create a new image to store the filtered result
+    let faceImg = createImage(snapshot.width, snapshot.height);
+    faceImg.loadPixels();
+
+    // Load pixel data for the snapshot
+    snapshot.loadPixels();
+    // Detect faces in the snapshot using the face detector
+    let faces = this.detector.detect(snapshot.canvas);
+
+    // Copy pixel data from the snapshot to the face image
+    for (let i = 0; i < snapshot.pixels.length; i++) {
+      faceImg.pixels[i] = snapshot.pixels[i];
+    }
+
+    // Iterate over each detected face
+    for (let i = 0; i < faces.length; i++) {
+      let face = faces[i];
+      // If the detected face has sufficient confidence
+      if (face[4] > 4) {
+        // Apply the dog filter overlay to the face region
+        this.overlayImage(
+          int(face[0]) - 10,
+          int(face[1]) - 10,
+          int(face[2]),
+          int(face[3]),
+          faceImg
+        );
+      }
+    }
+
+    // Update pixel data for the face image
+    faceImg.updatePixels();
+    // Display the filtered image with the dog filter overlay
+    image(faceImg, 425, 20);
+    // Add text label indicating the applied filter
+    text("Dog Filter", 505, 155);
+  }
+
+  // Method to overlay the dog image onto a specified region of another image
+  overlayImage(startX, startY, dWidth, dHeight, faceImg) {
+    this.dogImage.loadPixels();
+    this.dogImage.resize(dWidth, dHeight);
+
+    // Iterate over each pixel in the dog image
+    for (let y = 0; y < dHeight; y++) {
+      for (let x = 0; x < dWidth; x++) {
+        // Calculate pixel indices for the dog image and the face image
+        let dogPixelIndex = (y * this.dogImage.width + x) * 4;
+        let facePixelIndex = ((startY + y) * faceImg.width + (startX + x)) * 4;
+
+        // Retrieve color components from the dog image
+        let dogR = this.dogImage.pixels[dogPixelIndex];
+        let dogG = this.dogImage.pixels[dogPixelIndex + 1];
+        let dogB = this.dogImage.pixels[dogPixelIndex + 2];
+        let dogA = this.dogImage.pixels[dogPixelIndex + 3] / 255; // Normalize alpha
+
+        // Blend the dog image pixel with the face image pixel using alpha compositing
+        faceImg.pixels[facePixelIndex] = lerp(
+          faceImg.pixels[facePixelIndex],
+          dogR,
+          dogA
+        );
+        faceImg.pixels[facePixelIndex + 1] = lerp(
+          faceImg.pixels[facePixelIndex + 1],
+          dogG,
+          dogA
+        );
+        faceImg.pixels[facePixelIndex + 2] = lerp(
+          faceImg.pixels[facePixelIndex + 2],
+          dogB,
+          dogA
+        );
+        // Update the alpha channel of the face image pixel
+        faceImg.pixels[facePixelIndex + 3] = max(
+          faceImg.pixels[facePixelIndex + 3],
+          dogA * 255
+        );
+      }
+    }
+  }
+}
+
+ -------------------- faceDetection.js ------------------------ 
+
+// FaceDetection class for detecting faces in an image and applying processing based on user input
+class FaceDetection {
+  // Constructor to initialize the FaceDetection with a face detector
+  constructor(detector) {
+    this.detector = detector; // Face detector object
+  }
+
+  // Method to detect faces in the given snapshot and process them
+  detectAndProcess(snapshot) {
+    // Create a new image to store the processed result
+    let faceImg = createImage(snapshot.width, snapshot.height);
+    faceImg.loadPixels();
+
+    // Load pixel data for the snapshot
+    snapshot.loadPixels();
+    // Detect faces in the snapshot using the face detector
+    let faces = this.detector.detect(snapshot.canvas);
+
+    // Iterate over each detected face
+    for (let i = 0; i < faces.length; i++) {
+      let face = faces[i];
+      // If the detected face has sufficient confidence
+      if (face[4] > 4) {
+        // Process pixels of the detected face region
+        this.processPixels(
+          int(face[0]),
+          int(face[1]),
+          int(face[2]),
+          int(face[3]),
+          faceImg
+        );
+      }
+    }
+
+    // Update pixel data for the face image
+    faceImg.updatePixels();
+    // Display both the original snapshot and the processed face image
+    image(snapshot, 25, 600);
+    image(faceImg, 15, 600);
+
+    // Add text labels indicating the applied filters and instructions for user interaction
+    text("Face Detection", 105, 740);
+    text("Press 'g' for Greyscale", 105, 755);
+    text("Press 'b' for Blur", 105, 770);
+    text("Press 'c' for Colour Conversion", 105, 785);
+    text("Press 'p' for Pixelation", 105, 800);
+  }
+
+  // Method to draw borders around the detected face region
+  processPixels(startX, startY, dWidth, dHeight, faceImg) {
+    stroke(255);
+    strokeWeight(2);
+
+    // Draw top border
+    for (let x = startX; x < startX + dWidth; x++) {
+      let pixelIndex = (faceImg.width * startY + x) * 4;
+      this.setPixelToWhite(faceImg, pixelIndex);
+    }
+
+    // Draw bottom border
+    for (let x = startX; x < startX + dWidth; x++) {
+      let pixelIndex = (faceImg.width * (startY + dHeight - 1) + x) * 4;
+      this.setPixelToWhite(faceImg, pixelIndex);
+    }
+
+    // Draw left border
+    for (let y = startY; y < startY + dHeight; y++) {
+      let pixelIndex = (faceImg.width * y + startX) * 4;
+      this.setPixelToWhite(faceImg, pixelIndex);
+    }
+
+    // Draw right border
+    for (let y = startY; y < startY + dHeight; y++) {
+      let pixelIndex = (faceImg.width * y + (startX + dWidth - 1)) * 4;
+      this.setPixelToWhite(faceImg, pixelIndex);
+    }
+  }
+
+  // Method to set pixel values to white (255) in an image
+  setPixelToWhite(image, pixelIndex) {
+    image.pixels[pixelIndex + 0] = 255; // Red
+    image.pixels[pixelIndex + 1] = 255; // Green
+    image.pixels[pixelIndex + 2] = 255; // Blue
+    image.pixels[pixelIndex + 3] = 255; // Alpha
+  }
+}
+
+ -------------------- greyscaleAndBrightness.js ------------------------ 
+
+// GreyscaleAndBrightness class for converting an image to grayscale and adjusting brightness
+class GreyscaleAndBrightness {
+  constructor() {}
+
+  applyFilter(snapshot) {
+    // Create a new image to store the result
+    let img = createImage(snapshot.width, snapshot.height);
+
+    // Load pixel data for the original snapshot
+    snapshot.loadPixels();
+    // Load pixel data for the new image
+    img.loadPixels();
+
+    // Iterate through each pixel and convert to grayscale
+    for (let y = 0; y < snapshot.height; y++) {
+      for (let x = 0; x < snapshot.width; x++) {
+        let pixelIndex = (snapshot.width * y + x) * 4;
+        let pixelRed = snapshot.pixels[pixelIndex];
+        let pixelGreen = snapshot.pixels[pixelIndex + 1];
+        let pixelBlue = snapshot.pixels[pixelIndex + 2];
+
+        // Calculate average of RGB values and adjust brightness
+        let ave =
+          (constrain(pixelRed * 1.2, 0, 255) +
+            constrain(pixelGreen * 1.2, 0, 255) +
+            constrain(pixelBlue * 1.2, 0, 255)) /
+          3;
+
+        // Set RGB values to average
+        img.pixels[pixelIndex] = ave;
+        img.pixels[pixelIndex + 1] = ave;
+        img.pixels[pixelIndex + 2] = ave;
+        img.pixels[pixelIndex + 3] = 255; // Set alpha value to 255 (opaque)
+      }
+    }
+
+    // Update pixels for grayscale image
+    img.updatePixels();
+
+    // Display grayscale image
+    image(img, 225, 20);
+    // Add text label indicating the applied filter
+    text("Greyscale Image", 305, 155);
+  }
+}
+
+ -------------------- greyscaleFaceDetect.js ------------------------ 
+
+// GreyscaleFaceDetect class for detecting faces and converting the detected face regions to grayscale
+class GreyscaleFaceDetect {
+  // Constructor to initialize the GreyscaleFaceDetect with a face detector
+  constructor(detector) {
+    this.detector = detector; // Face detector object
+  }
+
+  // Method to detect faces in the given snapshot and convert the detected face regions to grayscale
+  detectAndConvert(snapshot) {
+    // Create a new image to store the result
+    let faceImg = createImage(snapshot.width, snapshot.height);
+    // Load pixel data for the new image
+    faceImg.loadPixels();
+
+    // Detect faces in the snapshot using the face detector
+    let faces = this.detector.detect(snapshot.canvas);
+    // Load pixel data for the original snapshot
+    snapshot.loadPixels();
+
+    // Copy pixel data from the original snapshot to the new image
+    for (let i = 0; i < snapshot.pixels.length; i++) {
+      faceImg.pixels[i] = snapshot.pixels[i];
+    }
+
+    // Iterate over each detected face
+    for (let i = 0; i < faces.length; i++) {
+      let face = faces[i];
+      // If the detected face has sufficient confidence
+      if (face[4] > 4) {
+        // Convert the face region to grayscale
+        this.greyscalePixels(
+          int(face[0]) - 10,
+          int(face[1]),
+          int(face[2]),
+          int(face[3]),
+          faceImg
+        );
+      }
+    }
+
+    // Update pixel data for the new image
+    faceImg.updatePixels();
+    // Display the resulting image with grayscale face regions
+    image(faceImg, 25, 600);
+  }
+
+  // Method to convert a region of an image to grayscale
+  greyscalePixels(startX, startY, dWidth, dHeight, faceImg) {
+    // Convert the face region to grayscale
+    for (let y = startY; y < startY + dHeight; y++) {
+      for (let x = startX; x < startX + dWidth; x++) {
+        let pixelIndex = (faceImg.width * y + x) * 4;
+        let pixelRed = faceImg.pixels[pixelIndex + 0];
+        let pixelGreen = faceImg.pixels[pixelIndex + 1];
+        let pixelBlue = faceImg.pixels[pixelIndex + 2];
+
+        // Calculate grayscale value using weighted average of RGB channels
+        let grey = 0.299 * pixelRed + 0.587 * pixelGreen + 0.114 * pixelBlue;
+
+        // Set RGB values to the grayscale value
+        faceImg.pixels[pixelIndex + 0] = grey; // Red
+        faceImg.pixels[pixelIndex + 1] = grey; // Green
+        faceImg.pixels[pixelIndex + 2] = grey; // Blue
+      }
+    }
+  }
+}
+
+ -------------------- main.js ------------------------ 
+
+/*
+## Report: Image Processing Project Findings and Reflection
+
+### Overview:
+
+My project focused on image processing techniques, particularly on thresholding RGB channels and applying filters to detected face regions. The main objective was to explore different methods of manipulating images and to implement these techniques using object-oriented programming (OOP) principles.
+
+### Image Thresholding:
+
+Thresholding each color channel individually provided insights into how different channels contribute to the overall image. By applying thresholds to the red, green, and blue channels separately, I could isolate specific features or objects based on their color characteristics. This technique proved useful for segmentation tasks, such as highlighting specific areas of interest or removing unwanted elements from an image.
+
+### Face Detection and Filters:
+
+Implementing face detection and applying filters to detected face regions presented unique challenges. Initially, I encountered difficulties with the accuracy and reliability of the face detection algorithm, which affected the placement and size of the detected face regions. Refactoring the code and fine-tuning the parameters helped improve the detection accuracy and ensure that the filters were applied correctly.
+
+### Challenges and Solutions:
+
+### Face Detection Accuracy:
+
+One of the primary challenges was achieving accurate face detection within the desired regions of the image. Initially, the detection algorithm failed to identify faces consistently, leading to inaccurate results. By adjusting the parameters and optimising the algorithm, I was able to enhance the detection accuracy and ensure that the filters were applied precisely to the detected face regions.
+
+### Project Completion:
+
+### Target Achievement:
+
+Despite facing challenges with face detection, I was able to successfully complete the project within the set timeframe. Through iterative development, I addressed the issues promptly and achieved the objectives. By adhering to a structured development process and maintaining open communication, I stayed on target and met my project goals.
+
+### Project Extension:
+
+### Dog Filter Implementation:
+
+As an extension to the project, I implemented a dog filter similar to popular social media filters. This unique feature involved overlaying a predefined image onto the detected face regions, transforming them into a dog-like appearance. The implementation of this filter added an element of creativity and entertainment to the project, showcasing the versatility of image processing techniques.
+
+### Conclusion:
+
+In conclusion, my project provided valuable insights into image processing techniques and their practical applications. By overcoming challenges and leveraging OOP principles, I successfully implemented various filters and thresholding methods. The project extension further enhanced the functionality and appeal of the application, demonstrating the potential for innovative image processing solutions.
+*/
+
+ -------------------- pixelateFaceDetect.js ------------------------ 
+
+// PixelateFaceDetection class for detecting faces and applying pixelation effect to the detected face regions
+class PixelateFaceDetection {
+  // Constructor to initialize the PixelateFaceDetection with a face detector
+  constructor(detector) {
+    this.detector = detector; // Face detector object
+  }
+
+  // Method to detect faces in the given snapshot and apply pixelation effect to the detected face regions
+  detectAndPixelate(snapshot) {
+    // Create a new image to store the result
+    let faceImg = createImage(snapshot.width, snapshot.height);
+    // Load pixel data for the new image
+    faceImg.loadPixels();
+
+    // Detect faces in the snapshot using the face detector
+    let faces = this.detector.detect(snapshot.canvas);
+    // Load pixel data for the original snapshot
+    snapshot.loadPixels();
+
+    // Copy pixel data from the original snapshot to the new image
+    for (let i = 0; i < snapshot.pixels.length; i++) {
+      faceImg.pixels[i] = snapshot.pixels[i];
+    }
+
+    // Iterate over each detected face
+    for (let i = 0; i < faces.length; i++) {
+      let face = faces[i];
+      // If the detected face has sufficient confidence
+      if (face[4] > 4) {
+        // Apply pixelation effect to the face region
+        this.pixelatePixels(
+          int(face[0]) - 10,
+          int(face[1]),
+          int(face[2]),
+          int(face[3]),
+          faceImg
+        );
+      }
+    }
+
+    // Update pixel data for the new image
+    faceImg.updatePixels();
+    // Display the resulting image with pixelated face regions
+    image(faceImg, 25, 600);
+  }
+
+  // Method to apply pixelation effect to a region of an image
+  pixelatePixels(startX, startY, dWidth, dHeight, faceImg) {
+    let pixelatedSize = 5; // Size of each pixelated block
+
+    // Iterate over each block in the face region
+    for (let y = startY; y < startY + dHeight; y += pixelatedSize) {
+      for (let x = startX; x < startX + dWidth; x += pixelatedSize) {
+        let sumRed = 0;
+        let sumGreen = 0;
+        let sumBlue = 0;
+
+        // Calculate the sum of RGB values of pixels in the block
+        for (let i = 0; i < pixelatedSize; i++) {
+          for (let j = 0; j < pixelatedSize; j++) {
+            // Ensure the coordinates are within the image boundaries
+            if (x + i < faceImg.width && y + j < faceImg.height) {
+              let pixelIndex = (faceImg.width * (y + j) + (x + i)) * 4;
+              sumRed += faceImg.pixels[pixelIndex + 0];
+              sumGreen += faceImg.pixels[pixelIndex + 1];
+              sumBlue += faceImg.pixels[pixelIndex + 2];
+            }
+          }
+        }
+
+        // Calculate the average RGB values of the block
+        let aveRed = sumRed / (pixelatedSize * pixelatedSize);
+        let aveGreen = sumGreen / (pixelatedSize * pixelatedSize);
+        let aveBlue = sumBlue / (pixelatedSize * pixelatedSize);
+
+        // Paint the block with the average RGB values
+        for (let i = 0; i < pixelatedSize; i++) {
+          for (let j = 0; j < pixelatedSize; j++) {
+            let pixelIndex = (faceImg.width * (y + j) + (x + i)) * 4;
+            faceImg.pixels[pixelIndex + 0] = aveRed; // Red
+            faceImg.pixels[pixelIndex + 1] = aveGreen; // Green
+            faceImg.pixels[pixelIndex + 2] = aveBlue; // Blue
+          }
+        }
+      }
+    }
+  }
+}
+
+ -------------------- rgbChannels.js ------------------------ 
+
+// RGBChannels class for separating the RGB channels of an image
+class RGBChannels {
+  constructor() {}
+
+  applyFilter(snapshot) {
+    // Create new images to hold the processed snapshot for each channel
+    let redImg = createImage(snapshot.width, snapshot.height);
+    let greenImg = createImage(snapshot.width, snapshot.height);
+    let blueImg = createImage(snapshot.width, snapshot.height);
+
+    // Load pixel data for each new image
+    redImg.loadPixels();
+    greenImg.loadPixels();
+    blueImg.loadPixels();
+
+    // Load pixel data for the original snapshot
+    snapshot.loadPixels();
+
+    // Iterate through each pixel in the snapshot
+    for (let y = 0; y < snapshot.height; y++) {
+      for (let x = 0; x < snapshot.width; x++) {
+        let pixelIndex = (snapshot.width * y + x) * 4;
+        let pixelRed = snapshot.pixels[pixelIndex + 0];
+        let pixelGreen = snapshot.pixels[pixelIndex + 1];
+        let pixelBlue = snapshot.pixels[pixelIndex + 2];
+
+        // Set the red channel only
+        redImg.pixels[pixelIndex + 0] = pixelRed; // Red
+        redImg.pixels[pixelIndex + 1] = 0; // Green
+        redImg.pixels[pixelIndex + 2] = 0; // Blue
+        redImg.pixels[pixelIndex + 3] = 255; // Alpha
+
+        // Set the green channel only
+        greenImg.pixels[pixelIndex + 0] = 0; // Red
+        greenImg.pixels[pixelIndex + 1] = pixelGreen; // Green
+        greenImg.pixels[pixelIndex + 2] = 0; // Blue
+        greenImg.pixels[pixelIndex + 3] = 255; // Alpha
+
+        // Set the blue channel only
+        blueImg.pixels[pixelIndex + 0] = 0; // Red
+        blueImg.pixels[pixelIndex + 1] = 0; // Green
+        blueImg.pixels[pixelIndex + 2] = pixelBlue; // Blue
+        blueImg.pixels[pixelIndex + 3] = 255; // Alpha
+      }
+    }
+
+    // Update pixel data for each channel image
+    redImg.updatePixels();
+    greenImg.updatePixels();
+    blueImg.updatePixels();
+
+    // Display each channel image
+    image(redImg, 25, 160);
+    image(greenImg, 225, 160);
+    image(blueImg, 425, 160);
+
+    // Label each channel
+    text("Red Channel", 105, 295);
+    text("Green Channel", 305, 295);
+    text("Blue Channel", 505, 295);
+  }
+}
+
+ -------------------- rgbThresholds.js ------------------------ 
+
+// RGBThresholds class for applying thresholds to RGB channels of an image
+class RGBThresholds {
+  constructor() {}
+
+  applyFilter(snapshot, redThreshold, greenThreshold, blueThreshold) {
+    // Create new images to hold the processed snapshot for each channel
+    let redImg = createImage(snapshot.width, snapshot.height);
+    let greenImg = createImage(snapshot.width, snapshot.height);
+    let blueImg = createImage(snapshot.width, snapshot.height);
+
+    // Load pixel data for each new image
+    redImg.loadPixels();
+    greenImg.loadPixels();
+    blueImg.loadPixels();
+
+    // Load pixel data for the original snapshot
+    snapshot.loadPixels();
+
+    // Iterate through each pixel in the snapshot
+    for (let y = 0; y < snapshot.height; y++) {
+      for (let x = 0; x < snapshot.width; x++) {
+        let pixelIndex = (snapshot.width * y + x) * 4;
+        let pixelRed = snapshot.pixels[pixelIndex + 0];
+        let pixelGreen = snapshot.pixels[pixelIndex + 1];
+        let pixelBlue = snapshot.pixels[pixelIndex + 2];
+
+        // Apply threshold to red channel
+        if (redThreshold > pixelRed) {
+          pixelRed = 0;
+        }
+        redImg.pixels[pixelIndex + 0] = pixelRed;
+        redImg.pixels[pixelIndex + 1] = 0;
+        redImg.pixels[pixelIndex + 2] = 0;
+        redImg.pixels[pixelIndex + 3] = 255;
+
+        // Apply threshold to green channel
+        if (greenThreshold > pixelGreen) {
+          pixelGreen = 0;
+        }
+        greenImg.pixels[pixelIndex + 0] = 0;
+        greenImg.pixels[pixelIndex + 1] = pixelGreen;
+        greenImg.pixels[pixelIndex + 2] = 0;
+        greenImg.pixels[pixelIndex + 3] = 255;
+
+        // Apply threshold to blue channel
+        if (blueThreshold > pixelBlue) {
+          pixelBlue = 0;
+        }
+        blueImg.pixels[pixelIndex + 0] = 0;
+        blueImg.pixels[pixelIndex + 1] = 0;
+        blueImg.pixels[pixelIndex + 2] = pixelBlue;
+        blueImg.pixels[pixelIndex + 3] = 255;
+      }
+    }
+
+    // Update pixel data for each channel image
+    redImg.updatePixels();
+    greenImg.updatePixels();
+    blueImg.updatePixels();
+
+    // Display each channel image
+    image(redImg, 25, 300);
+    image(greenImg, 225, 300);
+    image(blueImg, 425, 300);
+
+    // Label each channel with the applied threshold
+    text("Red Channel Threshold", 105, 455);
+    text("Green Channel Threshold", 305, 455);
+    text("Blue Channel Threshold", 505, 455);
+  }
+}
+
+ -------------------- sketch.js ------------------------ 
+
+let video; // Video capture variable
+let snapshot; // Snapshot variable
+let font; // Font variable
+
+// Slider variables
+let redSlider;
+let greenSlider;
+let blueSlider;
+let colourSpace1Slider;
+let colourSpace2Slider;
+
+// Filter objects
+let colorSpace1Converter;
+let colorSpace2Converter;
+let colorSpace1Threshold;
+let colorSpace2Threshold;
+let greyscaleAndBrightness;
+let rgbChannels;
+let rgbThresholds;
+
+// Face detection variables
+let detector;
+let classifier = objectdetect.frontalface;
+let blurFaceDetector;
+let colorConversionFaceDetector;
+let dogFilter;
+let faceDetection;
+let greyscaleFaceDetect;
+let pixelateFaceDetection;
+
+// Preload function to load assets
+function preload() {
+  // Load dog image and font
+  dogImage = loadImage("assets/dog.png");
+  font = loadFont("assets/RobotoCondensed-VariableFont_wght.ttf");
+}
+
+// Setup function to initialize the canvas and other components
+function setup() {
+  // Create canvas
+  createCanvas(1200, 810);
+  pixelDensity(1);
+  textFont(font);
+  textSize(12);
+  textAlign(CENTER);
+
+  // Create sliders
+  redSlider = createSlider(0, 255, 127.5);
+  redSlider.position(20, 425);
+  redSlider.size(165);
+
+  greenSlider = createSlider(0, 255, 127.5);
+  greenSlider.position(220, 425);
+  greenSlider.size(165);
+
+  blueSlider = createSlider(0, 255, 127.5);
+  blueSlider.position(420, 425);
+  blueSlider.size(165);
+
+  colourSpace1Slider = createSlider(0, 255, 70);
+  colourSpace1Slider.position(220, 725);
+  colourSpace1Slider.size(165);
+
+  colourSpace2Slider = createSlider(0, 255, 70);
+  colourSpace2Slider.position(420, 725);
+  colourSpace2Slider.size(165);
+
+  // Create video capture
+  video = createCapture(VIDEO);
+  video.size(160, 120);
+  video.hide();
+
+  // Initialize filter objects
+  colorSpace1Converter = new ColorSpace1Converter();
+  colorSpace2Converter = new ColorSpace2Converter();
+  colorSpace1Threshold = new ColorSpace1Threshold();
+  colorSpace2Threshold = new ColorSpace2Threshold();
+  greyscaleAndBrightness = new GreyscaleAndBrightness();
+  rgbChannels = new RGBChannels();
+  rgbThresholds = new RGBThresholds(snapshot);
+
+  // Initialize face detector
+  var scaleFactor = 1.2;
+  detector = new objectdetect.detector(180, 120, scaleFactor, classifier);
+  filterImg = createImage(160, 120);
+
+  blurFaceDetector = new BlurFaceDetect(detector);
+  colorConversionFaceDetector = new ColorConversionFaceDetector(detector);
+  dogFilter = new DogFilter(detector, dogImage);
+  faceDetection = new FaceDetection(detector);
+  greyscaleFaceDetect = new GreyscaleFaceDetect(detector);
+  pixelateFaceDetection = new PixelateFaceDetection(detector);
+}
+
+// Function to capture a snapshot from video
+function takeSnapshot() {
+  snapshot = video.get();
+}
+
+// Function to handle key presses
+function keyPressed() {
+  if (key === " ") {
+    takeSnapshot();
+  }
+}
+
+// Main drawing function
+function draw() {
+  background(255, 255, 255);
+  // Display webcam image
+  image(video, 25, 20);
+  text("Webcam Image", 105, 155);
+  image(video, 25, 460);
+  text("Webcam Image", 105, 595);
+  textSize(24);
+  text("Press space to take a snapshot", 800, 200);
+  textSize(12);
+  // Process snapshot if available
+  if (snapshot) {
+    processSnapshot();
+  }
+}
+
+// Function to process snapshot
+function processSnapshot() {
+  greyscaleAndBrightness.applyFilter(snapshot);
+  rgbChannels.applyFilter(snapshot);
+  rgbThresholds.applyFilter(
+    snapshot,
+    redSlider.value(),
+    greenSlider.value(),
+    blueSlider.value()
+  );
+  colorSpace1Converter.convertToColorSpace1(snapshot);
+  colorSpace2Converter.convertToColorSpace2(snapshot);
+  let ColourSpace1ThresholdsliderValue = colourSpace1Slider.value();
+  colorSpace1Threshold.applyThreshold(
+    snapshot,
+    ColourSpace1ThresholdsliderValue
+  );
+  let ColourSpace2ThresholdsliderValue = colourSpace2Slider.value();
+  colorSpace2Threshold.applyThreshold(
+    snapshot,
+    ColourSpace2ThresholdsliderValue
+  );
+  faceDetection.detectAndProcess(snapshot);
+  dogFilter.apply(snapshot);
+  if (key === "g") {
+    greyscaleFaceDetect.detectAndConvert(snapshot);
+  } else if (key === "f") {
+    Facedetection(snapshot);
+  } else if (key === "b") {
+    blurFaceDetector.detectAndBlurFaces(snapshot);
+  } else if (key === "c") {
+    colorConversionFaceDetector.detectAndConvertColorSpace(snapshot);
+  } else if (key === "p") {
+    pixelateFaceDetection.detectAndPixelate(snapshot);
+  }
+}
